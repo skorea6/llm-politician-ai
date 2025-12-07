@@ -12,7 +12,7 @@ def build_rag_prompt(question: str, hits) -> str:
 2. 아래 정치인 정보(JSON)들만 참고해 답하십시오:
 {context}
 
-3. 각 필드의 의미는 아래와 같습니다:
+3. JSON 필드의 의미는 아래와 같습니다:
 - politicianId: 정치인 고유 ID
 - name: 이름
 - gender: 성별(MAN: 남자, WOMAN: 여자)
@@ -70,14 +70,19 @@ def build_rag_prompt(question: str, hits) -> str:
 - ranking: 데이터 무시(ignore)
 - follower: 데이터 무시(ignore)
 
-4. 규칙:
+4. 답변하는 규칙:
 - json에 등장하는 정보만 사용
 - json에 정보가 없으면 "잘 모르겠습니다."
 - 절대 새로운 질문을 만들지 마세요
-- 답변은 한 문장으로만 출력
 - HTML 태그, <p>, <hr> 등 포함 금지
+- 8번, 9번 등 쓸데 없는 말을 붙이지 말고 답변을 완료했다면 대화를 끝내세요.
 
 5. 질문: {question}
+
+6. 답변은 반드시 질문에 대한 답변만 생성하세요.
+
+7. JSON, 질문, 규칙, 다른 문장 등 여타 설명을 출력하지 마세요.
+
 답변:
 """.strip()
 

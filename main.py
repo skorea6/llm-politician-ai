@@ -1,6 +1,7 @@
 import os
 import asyncio
 
+from qdrant_client.models import Filter, FieldCondition, MatchAny, NamedVector
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -8,9 +9,10 @@ from contextlib import asynccontextmanager
 
 from build_rag_prompt import build_rag_prompt
 from embedder import embed
+from extract.extract_name import extract_name_from_text
 from rank.rank import calc_additional_score
 from update_politicians import update_politicians_daily
-from store import init_collection, search_vectors, retrieve_by_id
+from store import init_collection, search_vectors, retrieve_by_id, qdrant
 from model import generate_stream
 from config import QDRANT_COLLECTION_BASIC, QDRANT_COLLECTION_DETAIL
 from dotenv import load_dotenv
@@ -65,44 +67,82 @@ async def answer(payload: dict):
         )
 
 
-    # 1) 쿼리 임베딩 생성
+    # 1) 쿼리 임베딩
     query_vec = embed(user_query)
 
-    ###########################################################
-    # 2) 1차 검색 — 기본 컬렉션(basic)에서 후보 N명 가져오기
-    ###########################################################
-    BASIC_LIMIT = 10
-    basic_results = search_vectors(QDRANT_COLLECTION_BASIC, query_vec, limit=BASIC_LIMIT)
+    # 1-1) 이름 전용 임베딩 생성
+    names = extract_name_from_text(user_query, max_names=2)
+    print(names)
 
-    candidates = []   # rerank 대상 ( {item, full_payload} 리스트 )
+    name_ids = None
 
-    if basic_results:
-        # basic에서 나온 정치인 ID들에 대해 full json(keys: electors 포함) 조회
+    if names:
+        # 첫 번째 이름만 임베딩
+        name_vec = embed(names[0])
+
+        ####################################################################
+        # 2) STEP 1 — name_vector로 먼저 검색 (이름 우선 검색)
+        ####################################################################
+        NAME_LIMIT = 5
+        name_results = qdrant.search(
+            collection_name=QDRANT_COLLECTION_BASIC,
+            query_vector=NamedVector(
+                name="name_vector",
+                vector=name_vec
+            ),
+            limit=NAME_LIMIT
+        )
+
+        name_ids = [r.id for r in name_results]
+
+    candidates = []
+
+    ####################################################################
+    # 3) STEP 2 — 이름 후보가 있으면 content_vector + filter 검색
+    ####################################################################
+    if name_ids:
+        print("이름 후보 찾음!!")
+        print(name_ids)
+        filtered = qdrant.search(
+            collection_name=QDRANT_COLLECTION_BASIC,
+            query_vector=NamedVector(
+                name="text_vector",
+                vector=query_vec
+            ),
+            limit=5,
+            query_filter=Filter(
+                must=[FieldCondition(
+                    key="id",
+                    match=MatchAny(any=name_ids)
+                )]
+            )
+        )
+
+        for res in filtered:
+            pid = res.id
+            detail_payload = retrieve_by_id(QDRANT_COLLECTION_DETAIL, pid)
+            full_payload = detail_payload.get("full_payload", detail_payload)
+            candidates.append({"item": res, "full": full_payload})
+
+            print(pid)
+
+    ####################################################################
+    # 4) STEP 3 — fallback: 이름 기반 후보 부족 → BASIC 일반 검색
+    ####################################################################
+    if len(candidates) < 3:
+        basic_results = search_vectors(QDRANT_COLLECTION_BASIC, query_vec, limit=5)
         for res in basic_results:
             pid = res.id
-
             detail_payload = retrieve_by_id(QDRANT_COLLECTION_DETAIL, pid)
-            if not detail_payload:
-                # detail 컬렉션에 없으면 일단 basic payload라도 사용
-                full_payload = res.payload
-            else:
-                full_payload = (
-                    detail_payload.get("full_payload")
-                    if isinstance(detail_payload, dict) and "full_payload" in detail_payload
-                    else detail_payload
-                )
-
-            candidates.append({
-                "item": res,             # basic 검색 결과(embedding score 포함)
-                "full": full_payload     # electors 포함 전체 JSON
-            })
+            full_payload = detail_payload.get("full_payload", detail_payload)
+            candidates.append({"item": res, "full": full_payload})
 
     ###########################################################
     # 3) fallback — basic 결과가 전혀 없으면 detail 컬렉션에서 직접 검색
     ###########################################################
     if not candidates:
         print("** 후보자를 찾지 못함 ** detail 검색 시작")
-        DETAIL_LIMIT = 10
+        DETAIL_LIMIT = 5
         detail_results = search_vectors(QDRANT_COLLECTION_DETAIL, query_vec, limit=DETAIL_LIMIT)
 
         if not detail_results:

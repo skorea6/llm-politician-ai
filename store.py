@@ -1,7 +1,7 @@
 import os
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import VectorParams, Distance, HnswConfigDiff, PointStruct
+from qdrant_client.models import VectorParams, Distance, HnswConfigDiff, PointStruct, NamedVector
 from config import QDRANT_COLLECTION_BASIC, QDRANT_COLLECTION_DETAIL, QDRANT_HOST, QDRANT_PORT
 from dotenv import load_dotenv
 load_dotenv()
@@ -69,5 +69,8 @@ def retrieve_by_id(collection_name: str, id_):
 
 def search_vectors(collection_name: str, vector, limit=3, filter=None):
     """벡터 검색 래퍼"""
-    results = qdrant.search(collection_name=collection_name, query_vector=vector, limit=limit, query_filter=filter)
+    results = qdrant.search(collection_name=collection_name, query_vector=NamedVector(
+                name="text_vector",
+                vector=vector
+            ), limit=limit, query_filter=filter)
     return results
