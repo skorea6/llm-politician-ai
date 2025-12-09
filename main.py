@@ -71,30 +71,28 @@ async def answer(payload: dict):
     query_vec = embed(user_query)
 
     # 1-1) 이름 전용 임베딩 생성
-    names = extract_name_from_text(user_query, max_names=2)
+    names = extract_name_from_text(user_query, max_names=3)
     print(names)
 
-    name_ids = None
+    name_ids = []
 
     if names:
-        # 첫 번째 이름만 임베딩
-        name_vec = embed(names[0])
+        for nm in names:
+            vec = embed(nm)
 
-        ####################################################################
-        # 2) STEP 1 — name_vector로 먼저 검색 (이름 우선 검색)
-        ####################################################################
-        NAME_LIMIT = 5
-        name_results = qdrant.search(
-            collection_name=QDRANT_COLLECTION_BASIC,
-            query_vector=NamedVector(
-                name="name_vector",
-                vector=name_vec
-            ),
-            limit=NAME_LIMIT
-        )
+            ####################################################################
+            # 2) STEP 1 — name_vector로 먼저 검색 (이름 우선 검색)
+            ####################################################################
+            name_results = qdrant.search(
+                collection_name=QDRANT_COLLECTION_BASIC,
+                query_vector=NamedVector(name="name_vector", vector=vec),
+                limit=5
+            )
 
-        name_ids = [r.id for r in name_results]
+            found_ids = [r.id for r in name_results]
+            name_ids.extend(found_ids)
 
+    name_ids = list(set(name_ids))
     candidates = []
 
     ####################################################################
@@ -105,11 +103,8 @@ async def answer(payload: dict):
         print(name_ids)
         filtered = qdrant.search(
             collection_name=QDRANT_COLLECTION_BASIC,
-            query_vector=NamedVector(
-                name="text_vector",
-                vector=query_vec
-            ),
-            limit=5,
+            query_vector=NamedVector(name="text_vector", vector=query_vec),
+            limit=15,
             query_filter=Filter(
                 must=[FieldCondition(
                     key="id",
@@ -182,19 +177,16 @@ async def answer(payload: dict):
 
     reranked.sort(key=lambda x: x["final_score"], reverse=True)
     print(reranked)
-    # 최종 top 1
-    best = reranked[0]
-    final_score = best["final_score"]
-    full_payload = best["full"]
 
-    ###########################################################
-    # 5) threshold 확인 (너무 낮으면 실패 처리)
-    ###########################################################
-    if final_score < 0.2:
+    filtered = [c for c in reranked if c["final_score"] >= 0.2]
+    if not filtered:
         return StreamingResponse(
             iter(["유사도 낮음: 관련 정치인을 찾지 못했습니다.\n"]),
             media_type="text/plain"
         )
+
+    top_k = filtered[:3]
+    full_payload = [c["full"] for c in top_k]
 
     ############################################
     # 4) RAG 프롬프트 생성
