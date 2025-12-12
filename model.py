@@ -12,9 +12,7 @@ client = OpenAI(
 MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 
 
-# ----------------------------
-# 🔹 스트리밍 LLM (generate_stream)
-# ----------------------------
+# LLM 스트리밍
 def generate_stream(prompt: str):
     stream = client.chat.completions.create(
         model=MODEL,
@@ -34,9 +32,7 @@ def generate_stream(prompt: str):
             yield text
 
 
-# ----------------------------
-# 🔹 소형 LLM (run_small_llm)
-# ----------------------------
+# 소규모 LLM
 def run_small_llm(prompt: str, max_new_tokens: int = 16) -> str:
     response = client.chat.completions.create(
         model=MODEL,
@@ -47,7 +43,7 @@ def run_small_llm(prompt: str, max_new_tokens: int = 16) -> str:
 
     return response.choices[0].message.content.strip()
 
-#
+# 추후 로컬 LLM 사용시 아래 주석 해제
 # tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=os.getenv("HUGGINGFACE_TOKEN"))
 # model = AutoModelForCausalLM.from_pretrained(
 #     MODEL_NAME,

@@ -6,7 +6,6 @@ from model import run_small_llm
 
 
 def _clean_name(raw: str) -> str:
-    """LLM에서 나온 이름 정제"""
     s = raw.strip()
     s = re.sub(r'^[`\'"\(\[]+|[`\'"\)\]]+$', '', s)
     s = re.sub(r'(님|씨|군|양|선생님|의)$', '', s)
@@ -14,7 +13,7 @@ def _clean_name(raw: str) -> str:
     return s
 
 def _extract_json_array(text: str) -> List[str]:
-    # 1) 첫 번째 JSON 배열만 정확히 추출
+    # 첫 번째 JSON 배열만 정확히 추출
     m = re.search(r"\[[^\]]*\]", text)
     if not m:
         return []
@@ -28,7 +27,7 @@ def _extract_json_array(text: str) -> List[str]:
 
 def extract_name_from_text(query: str, max_names: int = 3) -> List[str]:
     """
-    LLM 전용 이름 추출 (직접 LLM 호출 포함)
+    LLM 전용 이름 추출
     - query: 사용자 입력 문장
     - max_names: 반환 최대 개수
     """
@@ -49,8 +48,7 @@ def extract_name_from_text(query: str, max_names: int = 3) -> List[str]:
 
 JSON 배열만 출력하세요. 다른 글자는 절대 출력하지 마세요. 사람 이름이 없으면 []만 출력하세요.
 """
-    # 직접 LLM 호출
-    raw = run_small_llm(prompt)  # 여기서 LLM 호출
+    raw = run_small_llm(prompt)
     print("raw 데이터: ")
     print(raw)
     names = _extract_json_array(raw)

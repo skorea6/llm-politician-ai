@@ -7,9 +7,7 @@ from embedder import embed
 from store import upsert_batch
 
 
-###############################################
 # 정치인 API 수집 (매일 1회)
-###############################################
 def fetch_page(page):
     res = requests.post(POLITICIAN_API_URL, json={"page": page})
     res.raise_for_status()
@@ -85,9 +83,6 @@ def make_basic_text(name, core):
     return prefix + json.dumps(core, ensure_ascii=False)
 
 def make_detail_payload(p):
-    """
-    상세 컬렉션에 저장할 payload. 전체 원본을 넣음.
-    """
     return {"full_payload": p}
 
 def update_politicians_daily():
@@ -123,7 +118,7 @@ def update_politicians_daily():
                 "short_bio": f"정치인 이름이 '{p.get('name', '')}'인 사람의 성별은 {p.get('gender', '')}이고 생년월일은 {p.get('birthDate', '')}이다. 사는 곳은 {p.get('address', '')}이다. 범죄 기록은 {p.get('criminalRecord', '')}건이다."
             }
 
-            # 1) 기본(검색)용 임베딩
+            # 1) 검색용 임베딩
             embedding_text = make_basic_text(p.get("name"), core)
             vector_text = embed(embedding_text)
 
@@ -141,7 +136,7 @@ def update_politicians_daily():
                 "payload": core
             }
 
-            # 2) 상세(원본) 저장
+            # 2) 원본 저장
             detail_point = {
                 "id": pid,
                 "vector": vector_detail,

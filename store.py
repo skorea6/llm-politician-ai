@@ -37,16 +37,8 @@ def init_collection():
         )
         print(f"[QDRANT] Collection '{QDRANT_COLLECTION_DETAIL}' created.")
 
-# def upsert_batch(batch):
-#     qdrant.upsert(
-#         collection_name=QDRANT_COLLECTION,
-#         points=batch
-#     )
 
 def upsert_batch(collection_name: str, points: list):
-    """
-    points: list of dicts {'id': id, 'vector': vector (optional), 'payload': {...}}
-    """
     point_structs = []
     for p in points:
         if "vector" in p and p["vector"] is not None:
@@ -60,15 +52,15 @@ def upsert_batch(collection_name: str, points: list):
 
     qdrant.upsert(collection_name=collection_name, points=point_structs)
 
+
 def retrieve_by_id(collection_name: str, id_):
-    """id 단일 조회 (payload 반환)"""
     res = qdrant.retrieve(collection_name=collection_name, ids=[int(id_)])
     if res and len(res) > 0:
         return res[0].payload
     return None
 
+
 def search_vectors(collection_name: str, vector, limit=3, filter=None):
-    """벡터 검색 래퍼"""
     results = qdrant.search(collection_name=collection_name, query_vector=NamedVector(
                 name="text_vector",
                 vector=vector

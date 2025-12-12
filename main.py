@@ -24,9 +24,7 @@ def verify_auth(x_ai_key: str = Header(None)):
     if x_ai_key != AI_SECRET:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-###############################################
 # 앱 시작 시 1회 + 매일 자동 업데이트
-###############################################
 scheduler = BackgroundScheduler()
 
 @asynccontextmanager
@@ -54,9 +52,7 @@ async def run_update():
 
 app = FastAPI(lifespan=lifespan)
 
-###############################################
-# LLM 모델 호출 (스프링이 호출)
-###############################################
+# LLM 모델 호출 (스프링 webflux가 호출)
 @app.post("/answer", dependencies=[Depends(verify_auth)])
 async def answer(payload: dict):
     user_query = payload.get("query", "")
@@ -67,10 +63,10 @@ async def answer(payload: dict):
         )
 
 
-    # 1) 쿼리 임베딩
+    # 쿼리 임베딩
     query_vec = embed(user_query)
 
-    # 1-1) 이름 전용 임베딩 생성
+    # 1) 이름 전용 임베딩 생성
     names = extract_name_from_text(user_query, max_names=3)
     print(names)
 
@@ -80,9 +76,7 @@ async def answer(payload: dict):
         for nm in names:
             vec = embed(nm)
 
-            ####################################################################
-            # 2) STEP 1 — name_vector로 먼저 검색 (이름 우선 검색)
-            ####################################################################
+            # 2) name_vector로 먼저 검색 (이름 우선 검색)
             name_results = qdrant.search(
                 collection_name=QDRANT_COLLECTION_BASIC,
                 query_vector=NamedVector(name="name_vector", vector=vec),
@@ -95,9 +89,7 @@ async def answer(payload: dict):
     name_ids = list(set(name_ids))
     candidates = []
 
-    ####################################################################
-    # 3) STEP 2 — 이름 후보가 있으면 content_vector + filter 검색
-    ####################################################################
+    # 3) 이름 후보가 있으면 content_vector + filter 검색
     if name_ids:
         print("이름 후보 찾음!!")
         print(name_ids)
@@ -121,9 +113,7 @@ async def answer(payload: dict):
 
             print(pid)
 
-    ####################################################################
-    # 4) STEP 3 — fallback: 이름 기반 후보 부족 → BASIC 일반 검색
-    ####################################################################
+    # 4) 이름 기반 후보 부족 → BASIC 일반 검색
     if len(candidates) < 3:
         basic_results = search_vectors(QDRANT_COLLECTION_BASIC, query_vec, limit=5)
         for res in basic_results:
@@ -132,9 +122,7 @@ async def answer(payload: dict):
             full_payload = detail_payload.get("full_payload", detail_payload)
             candidates.append({"item": res, "full": full_payload})
 
-    ###########################################################
-    # 3) fallback — basic 결과가 전혀 없으면 detail 컬렉션에서 직접 검색
-    ###########################################################
+    # 5) basic 결과가 전혀 없으면 detail 컬렉션에서 직접 검색
     if not candidates:
         print("** 후보자를 찾지 못함 ** detail 검색 시작")
         DETAIL_LIMIT = 5
@@ -158,9 +146,7 @@ async def answer(payload: dict):
                 "full": full_payload
             })
 
-    ###########################################################
-    # 4) elector + votePercentage 기반 rerank 적용
-    ###########################################################
+    # 6) elector + votePercentage 기반 rerank 적용
     reranked = []
     for c in candidates:
         base_score = c["item"].score
@@ -188,12 +174,10 @@ async def answer(payload: dict):
     top_k = filtered[:3]
     full_payload = [c["full"] for c in top_k]
 
-    ############################################
-    # 4) RAG 프롬프트 생성
-    ############################################
+    # 7) RAG 프롬프트 생성
     prompt = build_rag_prompt(user_query, [full_payload])
 
-    # 4. LLM 스트리밍 응답
+    # 8) LLM 스트리밍 응답
     def stream():
         for chunk in generate_stream(prompt):
             yield chunk + "\n"
