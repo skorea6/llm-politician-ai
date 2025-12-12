@@ -30,7 +30,7 @@ scheduler = BackgroundScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- startup ---
-    print("⚡ FastAPI STARTUP")
+    print("FastAPI STARTUP")
 
     init_collection()
 
